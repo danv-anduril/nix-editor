@@ -41,6 +41,11 @@ struct Args {
     /// Formats output using nixpkgs-fmt. Helps when writing new values
     #[arg(short, long)]
     format: bool,
+
+    /// Only update existing attributes, do not create new ones
+    #[arg(short = 'u', long)]
+    #[arg(requires("write"))]
+    update_only: bool,
 }
 
 fn writetofile(file: &str, out: &str, format: bool) {
@@ -134,6 +139,10 @@ fn printerror(msg: &str) {
     println!("{} {}", "error:".red(), msg);
 }
 
+fn printwarn(msg: &str) {
+    eprintln!("{} {}", "warning:".yellow(), msg);
+}
+
 fn main() {
     let args = Args::parse();
     let output;
@@ -145,21 +154,31 @@ fn main() {
         }
     };
     if args.arr.is_some() {
-        output = match addtoarr(&f, &args.attribute, vec![args.arr.unwrap()]) {
+        output = match addtoarr(&f, &args.attribute, vec![args.arr.unwrap()], args.update_only) {
             Ok(x) => x,
             Err(e) => {
                 writeerr(e, &args.file, &args.attribute);
                 std::process::exit(1)
             }
         };
+
+        // Check if update actually occurred
+        if args.update_only && output == f {
+            printwarn(&format!("attribute '{}' does not exist, skipping", args.attribute.purple()));
+        }
     } else if args.val.is_some() {
-        output = match write(&f, &args.attribute, &args.val.unwrap()) {
+        output = match write(&f, &args.attribute, &args.val.unwrap(), args.update_only) {
             Ok(x) => x,
             Err(e) => {
                 writeerr(e, &args.file, &args.attribute);
                 std::process::exit(1)
             }
         };
+
+        // Check if update actually occurred
+        if args.update_only && output == f {
+            printwarn(&format!("attribute '{}' does not exist, skipping", args.attribute.purple()));
+        }
     } else if args.deref {
         output = match deref(&f, &args.attribute) {
             Ok(x) => x,

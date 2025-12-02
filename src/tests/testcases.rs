@@ -149,7 +149,7 @@ fn write_val1() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     // Write value to file
-    let out = match write(&config, "boot.loader.systemd-boot.enable", "false") {
+    let out = match write(&config, "boot.loader.systemd-boot.enable", "false", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -170,7 +170,7 @@ fn write_val2() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "this.doesnot.exist", "\"test\"") {
+    let out = match write(&config, "this.doesnot.exist", "\"test\"", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -191,7 +191,7 @@ fn write_val3() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "programs.gnupg.agent.enableExtraSocket", "true") {
+    let out = match write(&config, "programs.gnupg.agent.enableExtraSocket", "true", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -212,7 +212,7 @@ fn write_val4() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "boot.loader.systemd-boot.editor", "false") {
+    let out = match write(&config, "boot.loader.systemd-boot.editor", "false", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -233,7 +233,7 @@ fn write_val5() {
         fs::read_to_string(Path::new("src/tests/format2.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "a", "{ b = false; c = { d = \"test\"; }; }") {
+    let out = match write(&config, "a", "{ b = false; c = { d = \"test\"; }; }", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -254,7 +254,7 @@ fn write_val6() {
         fs::read_to_string(Path::new("src/tests/format2.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "x", "{ y = false; z = \"test\"; }") {
+    let out = match write(&config, "x", "{ y = false; z = \"test\"; }", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -276,7 +276,7 @@ fn write_format1() {
         fs::read_to_string(Path::new("src/tests/format.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "a.c", "false") {
+    let out = match write(&config, "a.c", "false", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -309,7 +309,7 @@ fn write_format2() {
         fs::read_to_string(Path::new("src/tests/format.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out = match write(&config, "a.d.g", "\"test\"") {
+    let out = match write(&config, "a.d.g", "\"test\"", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -346,6 +346,7 @@ fn write_arr1() {
         &config,
         "environment.systemPackages",
         vec!["nano".to_string(), "unzip".to_string()],
+        false
     ) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
@@ -371,6 +372,7 @@ fn write_arr2() {
         &config,
         "test.arr",
         vec!["one".to_string(), "two".to_string()],
+        false
     ) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
@@ -380,6 +382,7 @@ fn write_arr2() {
         &out,
         "test.arr",
         vec!["three".to_string(), "four".to_string()],
+        false
     ) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
@@ -449,7 +452,7 @@ fn get_with2() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     // Write value to file that does not yet exist
-    let out1 = match write(&config, "test2.test", "with x; with y; test") {
+    let out1 = match write(&config, "test2.test", "with x; with y; test", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
@@ -540,11 +543,160 @@ fn write_val_internal1() {
         fs::read_to_string(Path::new("src/tests/format3.nix")).expect("Failed to read file");
     
     // Write value to file that does not yet exist
-    let out = match write(&config, "a.c.b", "true") {
+    let out = match write(&config, "a.c.b", "true", false) {
         Ok(s) => s,
         Err(_) => panic!("Failed to write to file"),
     };
 
     // Check if read value is correct
     assert_eq!(out.trim(), "{\n  a = {\n    b = true;\n    c.b = true;\n  };\n}");
+}
+
+#[test]
+fn write_update_only_skip() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let result = write(&config, "this.does.not.exist", "\"test\"", true);
+
+    match result {
+        Ok(output) => {
+            // Should return original file unchanged
+            assert_eq!(output, config);
+            // Verify the attribute still doesn't exist
+            assert!(readvalue(&output, "this.does.not.exist").is_err());
+        },
+        Err(_) => panic!("Expected Ok with original file when using update_only on non-existent attribute"),
+    }
+}
+
+#[test]
+fn write_update_only_success() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let out = match write(&config, "boot.loader.systemd-boot.enable", "false", true) {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to write to existing attribute with update_only"),
+    };
+
+    let r = match readvalue(&out, "boot.loader.systemd-boot.enable") {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to read value"),
+    };
+
+    assert_eq!(r, "false")
+}
+
+#[test]
+fn write_update_only_nested_skip() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let result = write(&config, "programs.gnupg.agent.newSetting", "true", true);
+
+    match result {
+        Ok(output) => {
+            // Should return original file unchanged
+            assert_eq!(output, config);
+            // Verify the attribute still doesn't exist
+            assert!(readvalue(&output, "programs.gnupg.agent.newSetting").is_err());
+        },
+        Err(_) => panic!("Expected Ok with original file when using update_only on non-existent nested attribute"),
+    }
+}
+
+#[test]
+fn write_update_only_nested_success() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let out = match write(&config, "programs.gnupg.agent.enable", "false", true) {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to update nested attribute with update_only"),
+    };
+
+    let r = match readvalue(&out, "programs.gnupg.agent.enable") {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to read value"),
+    };
+
+    assert_eq!(r, "false")
+}
+
+#[test]
+fn addtoarr_update_only_skip() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let result = addtoarr(&config, "new.array", vec!["item1".to_string()], true);
+
+    match result {
+        Ok(output) => {
+            // Should return original file unchanged
+            assert_eq!(output, config);
+            // Verify the array still doesn't exist
+            assert!(getarrvals(&output, "new.array").is_err());
+        },
+        Err(_) => panic!("Expected Ok with original file when using update_only to create new array"),
+    }
+}
+
+#[test]
+fn addtoarr_update_only_success() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let out = match addtoarr(
+        &config,
+        "environment.systemPackages",
+        vec!["nano".to_string()],
+        true
+    ) {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to add to existing array with update_only"),
+    };
+
+    let r = match getarrvals(&out, "environment.systemPackages") {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to read array"),
+    };
+
+    assert_eq!(r, vec!["vim", "wget", "firefox", "nano"])
+}
+
+#[test]
+fn write_backward_compatibility() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
+
+    let out = match write(&config, "new.attribute", "\"value\"", false) {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to write with update_only=false (backward compatibility broken)"),
+    };
+
+    let r = match readvalue(&out, "new.attribute") {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to read value"),
+    };
+
+    assert_eq!(r, "\"value\"")
+}
+
+#[test]
+fn write_update_only_attrset_skip() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/format2.nix")).expect("Failed to read file");
+
+    let result = write(&config, "x", "{ y = false; z = \"test\"; }", true);
+
+    match result {
+        Ok(output) => {
+            // Should return original file unchanged
+            assert_eq!(output, config);
+            // Verify the attribute still doesn't exist
+            assert!(readvalue(&output, "x").is_err());
+        },
+        Err(_) => panic!("Expected Ok with original file when using update_only on non-existent attribute set"),
+    }
 }

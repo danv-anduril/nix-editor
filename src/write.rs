@@ -15,7 +15,7 @@ pub enum WriteError {
     WriteValueToSet,
 }
 
-pub fn write(f: &str, query: &str, val: &str) -> Result<String, WriteError> {
+pub fn write(f: &str, query: &str, val: &str, update_only: bool) -> Result<String, WriteError> {
     let ast = rnix::Root::parse(f);
     let configbase = match getcfgbase(&ast.syntax()) {
         Some(x) => x,
@@ -26,7 +26,7 @@ pub fn write(f: &str, query: &str, val: &str) -> Result<String, WriteError> {
     if val.trim_start().starts_with('{') && val.trim_end().ends_with('}') {
         if let Some(x) = getcfgbase(&rnix::Root::parse(val).syntax()) {
             if x.kind() == SyntaxKind::NODE_ATTR_SET {
-                return addattrval(f, &configbase, query, &x);
+                return addattrval(f, &configbase, query, &x, update_only);
             }
         }
     }
@@ -41,6 +41,9 @@ pub fn write(f: &str, query: &str, val: &str) -> Result<String, WriteError> {
             modvalue(&x, val).unwrap()
         }
         None => {
+            if update_only {
+                return Ok(f.to_string());
+            }
             let mut y = query.split('.').collect::<Vec<_>>();
             y.pop();
             let x = findattrset(&configbase, &y.join("."), 0);
@@ -227,6 +230,7 @@ fn addattrval(
     configbase: &SyntaxNode,
     query: &str,
     val: &SyntaxNode,
+    update_only: bool,
 ) -> Result<String, WriteError> {
     let mut attrmap = HashMap::new();
     buildattrvec(val, vec![], &mut attrmap);
@@ -237,13 +241,18 @@ fn addattrval(
         .any(|(key, _)| findattr(configbase, &format!("{}.{}", query, key)).is_some())
     {
         for (key, val) in attrmap {
-            match write(&file, &format!("{}.{}", query, key), &val) {
+            match write(&file, &format!("{}.{}", query, key), &val, update_only) {
                 Ok(x) => file = x,
                 Err(e) => return Err(e),
             }
         }
-    } else if let Some(c) = getcfgbase(&rnix::Root::parse(&file).syntax()) {
-        file = addvalue(&c, query, &val.to_string()).to_string();
+    } else {
+        if update_only {
+            return Ok(f.to_string());
+        }
+        if let Some(c) = getcfgbase(&rnix::Root::parse(&file).syntax()) {
+            file = addvalue(&c, query, &val.to_string()).to_string();
+        }
     }
     Ok(file)
 }
@@ -277,7 +286,7 @@ fn buildattrvec(val: &SyntaxNode, prefix: Vec<String>, map: &mut HashMap<String,
     }
 }
 
-pub fn addtoarr(f: &str, query: &str, items: Vec<String>) -> Result<String, WriteError> {
+pub fn addtoarr(f: &str, query: &str, items: Vec<String>, update_only: bool) -> Result<String, WriteError> {
     let ast = rnix::Root::parse(f);
     let configbase = match getcfgbase(&ast.syntax()) {
         Some(x) => x,
@@ -288,10 +297,13 @@ pub fn addtoarr(f: &str, query: &str, items: Vec<String>) -> Result<String, Writ
             Some(x) => x,
             None => return Err(WriteError::ArrayError),
         },
-        // If no arrtibute is found, create a new one
+        // If no arrtibute is found, create a new one (unless update_only is set)
         None => {
+            if update_only {
+                return Ok(f.to_string());
+            }
             let newval = addvalue(&configbase, query, "[\n  ]");
-            return addtoarr(&newval.to_string(), query, items);
+            return addtoarr(&newval.to_string(), query, items, update_only);
         }
     };
     Ok(outnode.to_string())
