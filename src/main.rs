@@ -97,6 +97,13 @@ fn writeerr(e: nix_editor::write::WriteError, file: &str, attr: &str) {
             );
             printerror(&msg);
         }
+        nix_editor::write::WriteError::SkippedNonLiteral => {
+            msg = format!(
+                "attribute '{}' has a non-literal value, skipping",
+                attr.purple(),
+            );
+            printwarn(&msg);
+        }
     }
 }
 
@@ -169,16 +176,19 @@ fn main() {
     } else if args.val.is_some() {
         output = match write(&f, &args.attribute, &args.val.unwrap(), args.update_only) {
             Ok(x) => x,
+            Err(nix_editor::write::WriteError::SkippedNonLiteral) => {
+                printwarn(&format!("attribute '{}' has a non-literal value, skipping", args.attribute.purple()));
+                f.clone()
+            }
+            Err(nix_editor::write::WriteError::NoAttr) if args.update_only => {
+                printwarn(&format!("attribute '{}' does not exist, skipping", args.attribute.purple()));
+                f.clone()
+            }
             Err(e) => {
                 writeerr(e, &args.file, &args.attribute);
                 std::process::exit(1)
             }
         };
-
-        // Check if update actually occurred
-        if args.update_only && output == f {
-            printwarn(&format!("attribute '{}' does not exist, skipping", args.attribute.purple()));
-        }
     } else if args.deref {
         output = match deref(&f, &args.attribute) {
             Ok(x) => x,

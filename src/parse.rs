@@ -136,11 +136,16 @@ pub fn getkey(node: &SyntaxNode) -> Vec<String> {
 }
 
 pub fn getcfgbase(node: &SyntaxNode) -> Option<SyntaxNode> {
-    // First check if we're in a set
     if node.kind() == SyntaxKind::NODE_ATTR_SET {
         return Some(node.clone());
     }
-    // Next check if any of our children the set
+    // For let-in, skip bindings and only look at the body expression
+    if node.kind() == SyntaxKind::NODE_LET_IN {
+        if let Some(body) = node.children().last() {
+            return getcfgbase(&body);
+        }
+        return None;
+    }
     for child in node.children() {
         if child.kind() == SyntaxKind::NODE_ATTR_SET {
             return Some(child);

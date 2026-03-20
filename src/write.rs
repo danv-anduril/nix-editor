@@ -3,7 +3,7 @@ use rnix::{self, SyntaxKind, SyntaxNode};
 use std::collections::HashMap;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum WriteError {
     #[error("Error while parsing.")]
     ParseError,
@@ -13,6 +13,8 @@ pub enum WriteError {
     ArrayError,
     #[error("Writing value to attribute set.")]
     WriteValueToSet,
+    #[error("Skipped non-literal value.")]
+    SkippedNonLiteral,
 }
 
 pub fn write(f: &str, query: &str, val: &str, update_only: bool) -> Result<String, WriteError> {
@@ -37,12 +39,15 @@ pub fn write(f: &str, query: &str, val: &str, update_only: bool) -> Result<Strin
                 if n.kind() == SyntaxKind::NODE_ATTR_SET {
                     return Err(WriteError::WriteValueToSet);
                 }
+                if update_only && !is_simple_value(&n) {
+                    return Err(WriteError::SkippedNonLiteral);
+                }
             }
             modvalue(&x, val).unwrap()
         }
         None => {
             if update_only {
-                return Ok(f.to_string());
+                return Err(WriteError::NoAttr);
             }
             let mut y = query.split('.').collect::<Vec<_>>();
             y.pop();
@@ -155,12 +160,12 @@ fn findattrset(
     None
 }
 
-// Recursively check children of NODE_APPLY and NODE_LAMBDA for NODE_ATTR_SET
 fn findnestedattrset(configbase: &SyntaxNode) -> Option<SyntaxNode> {
     for child in configbase.children() {
         if child.kind() == SyntaxKind::NODE_APPLY
             || child.kind() == SyntaxKind::NODE_LAMBDA
             || child.kind() == SyntaxKind::NODE_WITH
+            || child.kind() == SyntaxKind::NODE_LET_IN
         {
             return findnestedattrset(&child);
         } else if child.kind() == SyntaxKind::NODE_ATTR_SET {
@@ -192,6 +197,16 @@ fn matchval(configbase: &SyntaxNode, query: &str, acc: usize) -> Option<SyntaxNo
         None
     } else {
         matchval(configbase, query, acc - 1)
+    }
+}
+
+fn is_simple_value(node: &SyntaxNode) -> bool {
+    match node.kind() {
+        SyntaxKind::NODE_STRING => {
+            !node.children().any(|c| c.kind() == SyntaxKind::NODE_INTERPOL)
+        }
+        SyntaxKind::NODE_LITERAL | SyntaxKind::NODE_IDENT => true,
+        _ => false,
     }
 }
 
@@ -248,7 +263,7 @@ fn addattrval(
         }
     } else {
         if update_only {
-            return Ok(f.to_string());
+            return Err(WriteError::NoAttr);
         }
         if let Some(c) = getcfgbase(&rnix::Root::parse(&file).syntax()) {
             file = addvalue(&c, query, &val.to_string()).to_string();
@@ -297,10 +312,9 @@ pub fn addtoarr(f: &str, query: &str, items: Vec<String>, update_only: bool) -> 
             Some(x) => x,
             None => return Err(WriteError::ArrayError),
         },
-        // If no arrtibute is found, create a new one (unless update_only is set)
         None => {
             if update_only {
-                return Ok(f.to_string());
+                return Err(WriteError::NoAttr);
             }
             let newval = addvalue(&configbase, query, "[\n  ]");
             return addtoarr(&newval.to_string(), query, items, update_only);

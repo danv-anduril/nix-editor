@@ -1,6 +1,6 @@
 use crate::{
     read::{getarrvals, readvalue, ReadError, getwithvalue},
-    write::{ addtoarr, deref, write, rmarr }, parse::{collectattrs, getcfgbase, get_collection},
+    write::{ addtoarr, deref, write, rmarr, WriteError }, parse::{collectattrs, getcfgbase, get_collection},
 };
 use core::panic;
 use std::{fs, path::Path, collections::HashMap};
@@ -558,16 +558,7 @@ fn write_update_only_skip() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     let result = write(&config, "this.does.not.exist", "\"test\"", true);
-
-    match result {
-        Ok(output) => {
-            // Should return original file unchanged
-            assert_eq!(output, config);
-            // Verify the attribute still doesn't exist
-            assert!(readvalue(&output, "this.does.not.exist").is_err());
-        },
-        Err(_) => panic!("Expected Ok with original file when using update_only on non-existent attribute"),
-    }
+    assert_eq!(result, Err(WriteError::NoAttr));
 }
 
 #[test]
@@ -594,16 +585,7 @@ fn write_update_only_nested_skip() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     let result = write(&config, "programs.gnupg.agent.newSetting", "true", true);
-
-    match result {
-        Ok(output) => {
-            // Should return original file unchanged
-            assert_eq!(output, config);
-            // Verify the attribute still doesn't exist
-            assert!(readvalue(&output, "programs.gnupg.agent.newSetting").is_err());
-        },
-        Err(_) => panic!("Expected Ok with original file when using update_only on non-existent nested attribute"),
-    }
+    assert_eq!(result, Err(WriteError::NoAttr));
 }
 
 #[test]
@@ -630,16 +612,7 @@ fn addtoarr_update_only_skip() {
         fs::read_to_string(Path::new("src/tests/configuration.nix")).expect("Failed to read file");
 
     let result = addtoarr(&config, "new.array", vec!["item1".to_string()], true);
-
-    match result {
-        Ok(output) => {
-            // Should return original file unchanged
-            assert_eq!(output, config);
-            // Verify the array still doesn't exist
-            assert!(getarrvals(&output, "new.array").is_err());
-        },
-        Err(_) => panic!("Expected Ok with original file when using update_only to create new array"),
-    }
+    assert_eq!(result, Err(WriteError::NoAttr));
 }
 
 #[test]
@@ -689,14 +662,5 @@ fn write_update_only_attrset_skip() {
         fs::read_to_string(Path::new("src/tests/format2.nix")).expect("Failed to read file");
 
     let result = write(&config, "x", "{ y = false; z = \"test\"; }", true);
-
-    match result {
-        Ok(output) => {
-            // Should return original file unchanged
-            assert_eq!(output, config);
-            // Verify the attribute still doesn't exist
-            assert!(readvalue(&output, "x").is_err());
-        },
-        Err(_) => panic!("Expected Ok with original file when using update_only on non-existent attribute set"),
-    }
+    assert_eq!(result, Err(WriteError::NoAttr));
 }
