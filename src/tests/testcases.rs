@@ -664,3 +664,59 @@ fn write_update_only_attrset_skip() {
     let result = write(&config, "x", "{ y = false; z = \"test\"; }", true);
     assert_eq!(result, Err(WriteError::NoAttr));
 }
+
+#[test]
+fn write_let_in_literal_success() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/let_in_literal.nix")).expect("Failed to read file");
+
+    let out = match write(&config, "version", "\"2.0.0\"", true) {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to update version in let-in block"),
+    };
+
+    let r = match readvalue(&out, "version") {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to read value"),
+    };
+
+    assert_eq!(r, "\"2.0.0\"")
+}
+
+#[test]
+fn write_let_in_ident_skip() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/let_in.nix")).expect("Failed to read file");
+
+    let result = write(&config, "version", "\"2.0.0\"", true);
+    assert_eq!(result, Err(WriteError::SkippedNonLiteral));
+}
+
+#[test]
+fn write_interpolation_skip() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/interpolation.nix")).expect("Failed to read file");
+
+    let result = write(&config, "version", "\"2.0.0\"", true);
+    assert_eq!(result, Err(WriteError::SkippedNonLiteral));
+}
+
+#[test]
+fn write_update_only_string_literal() {
+    let config =
+        fs::read_to_string(Path::new("src/tests/let_in_literal.nix")).expect("Failed to read file");
+
+    let out = match write(&config, "version", "\"3.0.0\"", true) {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to update string literal version"),
+    };
+
+    let r = match readvalue(&out, "version") {
+        Ok(s) => s,
+        Err(_) => panic!("Failed to read value"),
+    };
+
+    assert_eq!(r, "\"3.0.0\"");
+    assert!(out.contains("version = \"3.0.0\""));
+    assert!(!out.contains("version = \"1.0.0\""));
+}

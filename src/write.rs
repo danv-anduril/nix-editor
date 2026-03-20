@@ -205,7 +205,11 @@ fn is_simple_value(node: &SyntaxNode) -> bool {
         SyntaxKind::NODE_STRING => {
             !node.children().any(|c| c.kind() == SyntaxKind::NODE_INTERPOL)
         }
-        SyntaxKind::NODE_LITERAL | SyntaxKind::NODE_IDENT => true,
+        SyntaxKind::NODE_LITERAL => true,
+        SyntaxKind::NODE_IDENT => {
+            let text = node.text().to_string();
+            matches!(text.as_str(), "true" | "false" | "null")
+        }
         _ => false,
     }
 }
